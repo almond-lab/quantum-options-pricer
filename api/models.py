@@ -8,11 +8,35 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class PricingRequest(BaseModel):
-    """Input parameters for a single European vanilla option pricing request."""
+    """
+    Input parameters for a single European vanilla option pricing request.
 
-    spot: float = Field(
-        ..., gt=0,
-        description="Current underlying price (USD)",
+    **Auto-fetch behaviour**
+    If `spot`, `volatility`, or `risk_free_rate` are omitted, they are
+    resolved automatically from live market data:
+
+    | Field            | Auto-source                                    |
+    |------------------|------------------------------------------------|
+    | `spot`           | yfinance — last traded price for `ticker`      |
+    | `volatility`     | Databento OPRA NBBO mid → BS IV inversion      |
+    | `risk_free_rate` | yfinance `^IRX` (13-week US T-bill yield)      |
+
+    `ticker` is **required** whenever `spot` or `volatility` is omitted.
+    """
+
+    ticker: Optional[str] = Field(
+        default=None,
+        description=(
+            "Equity root ticker (e.g. 'AAPL', 'SPY'). "
+            "Required when spot or volatility is not provided. "
+            "Do not append exchange suffixes — the service handles OPRA formatting internally."
+        ),
+        examples=["AAPL"],
+    )
+    spot: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Current underlying price (USD). Omit to fetch live from yfinance.",
         examples=[260.58],
     )
     strike: float = Field(
@@ -25,15 +49,23 @@ class PricingRequest(BaseModel):
         description="Calendar days until expiration",
         examples=[30],
     )
-    volatility: float = Field(
-        ..., gt=0,
-        description="Annualised implied volatility, e.g. 0.30 = 30%",
+    volatility: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Annualised implied volatility, e.g. 0.30 = 30%. "
+            "Omit to back-calculate from Databento OPRA NBBO mid via BS inversion."
+        ),
         examples=[0.30],
     )
-    risk_free_rate: float = Field(
-        ..., ge=0,
-        description="Annualised risk-free rate, e.g. 0.053 = 5.3%",
-        examples=[0.053],
+    risk_free_rate: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Annualised risk-free rate, e.g. 0.036 = 3.6%. "
+            "Omit to fetch live from yfinance ^IRX (13-week US T-bill)."
+        ),
+        examples=[0.036],
     )
     option_type: Literal["call", "put"] = Field(
         default="call",
@@ -60,13 +92,29 @@ class PricingRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def strike_within_reason(self) -> "PricingRequest":
-        ratio = self.strike / self.spot
-        if ratio < 0.1 or ratio > 10.0:
+    def validate_auto_fetch_requirements(self) -> "PricingRequest":
+        needs_ticker = self.spot is None or self.volatility is None
+        if needs_ticker and not self.ticker:
+            missing = []
+            if self.spot is None:
+                missing.append("spot")
+            if self.volatility is None:
+                missing.append("volatility")
             raise ValueError(
-                f"strike/spot ratio {ratio:.2f} is extreme (must be 0.1–10). "
-                "Deep OTM options fall outside the quantum circuit's price domain."
+                f"`ticker` is required when {' and '.join(missing)} "
+                f"{'are' if len(missing) > 1 else 'is'} not provided."
             )
+
+        if self.ticker:
+            self.ticker = self.ticker.upper().strip()
+
+        if self.spot is not None and self.strike:
+            ratio = self.strike / self.spot
+            if ratio < 0.1 or ratio > 10.0:
+                raise ValueError(
+                    f"strike/spot ratio {ratio:.2f} is extreme (must be 0.1–10). "
+                    "Deep OTM options fall outside the quantum circuit's price domain."
+                )
         return self
 
 
@@ -78,14 +126,24 @@ class ConfidenceInterval(BaseModel):
 class PricingResponse(BaseModel):
     """Quantum pricing result for a European vanilla option."""
 
-    # ── Inputs echoed back ────────────────────────────────────────────────────
+    # ── Inputs echoed back (resolved values) ─────────────────────────────────
+    ticker: Optional[str] = Field(default=None, description="Ticker used for market data fetch, if any")
     option_type: str
-    spot: float
+    spot: float = Field(description="Spot price used for pricing (resolved if auto-fetched)")
     strike: float
     days_to_expiry: int
     time_to_expiry_years: float = Field(description="T in years (days / 365)")
-    volatility: float
-    risk_free_rate: float
+    volatility: float = Field(description="Implied volatility used (resolved if auto-fetched)")
+    risk_free_rate: float = Field(description="Risk-free rate used (resolved if auto-fetched)")
+
+    # ── Market data provenance ────────────────────────────────────────────────
+    market_data_used: bool = Field(
+        description="True if any parameter was auto-fetched from a live data source"
+    )
+    market_data_source: Optional[str] = Field(
+        default=None,
+        description="Human-readable description of which sources were used for auto-fetched fields",
+    )
 
     # ── Quantum result ────────────────────────────────────────────────────────
     price: float = Field(description="Quantum option price (USD)")
@@ -95,25 +153,23 @@ class PricingResponse(BaseModel):
     )
 
     # ── Circuit metadata ──────────────────────────────────────────────────────
-    num_qubits: int = Field(description="Uncertainty qubits used")
+    num_qubits: int
     price_bins: int = Field(description="2^num_qubits price levels in the grid")
-    total_circuit_qubits: int = Field(description="Uncertainty + ancilla qubits")
-    grover_depth: int = Field(description="Decomposed Grover operator depth")
-    oracle_queries: int = Field(description="Total oracle calls made by IAE")
-    iae_rounds: int = Field(description="Number of IAE iterations")
+    total_circuit_qubits: int
+    grover_depth: int
+    oracle_queries: int
+    iae_rounds: int
     epsilon_target: float
     alpha: float
     backend: str = Field(description="Sampler backend used: 'gpu' or 'cpu'")
 
 
 class HealthResponse(BaseModel):
-    """Service health and backend status."""
-
     status: Literal["ok"] = "ok"
-    backend: str = Field(description="Active backend: 'gpu' or 'cpu'")
-    sampler_type: str = Field(description="Fully qualified sampler class name")
+    backend: str
+    sampler_type: str
     gpu_available: bool
-    num_qubits_default: int = Field(description="Default num_qubits for requests")
+    num_qubits_default: int
 
 
 class ErrorResponse(BaseModel):
