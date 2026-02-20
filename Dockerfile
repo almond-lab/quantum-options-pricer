@@ -48,7 +48,7 @@ RUN git clone --depth 1 --branch 0.17.2 https://github.com/Qiskit/qiskit-aer.git
  && cd /tmp/qiskit-aer-src \
  && CUDACXX=/usr/local/cuda/bin/nvcc \
     CMAKE_ARGS="-DAER_THRUST_BACKEND=CUDA -DAER_CUDA_ARCH=${CUDA_ARCH}" \
-    CMAKE_BUILD_PARALLEL_LEVEL=2 \
+    CMAKE_BUILD_PARALLEL_LEVEL=1 \
     pip install --no-cache-dir . \
  && rm -rf /tmp/qiskit-aer-src
 

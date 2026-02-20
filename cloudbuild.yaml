@@ -15,7 +15,7 @@ substitutions:
   _CUDA_ARCH: '7.5'
 
 options:
-  machineType: 'E2_HIGHCPU_8'   # 8 vCPU / 8 GB — needed for CUDA source compile
+  machineType: 'E2_HIGHCPU_32'  # 32 vCPU / 32 GB — bindings.cc nvcc OOMs on 8 GB
   diskSizeGb: 200                 # CUDA devel image + source build needs headroom
   logging: CLOUD_LOGGING_ONLY
 
