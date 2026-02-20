@@ -81,9 +81,13 @@ class PricingRequest(BaseModel):
         examples=[8],
     )
     epsilon_target: float = Field(
-        default=0.01, ge=0.005, le=0.1,
-        description="IAE precision target ε. Lower = more accurate, more iterations.",
-        examples=[0.01],
+        default=0.05, ge=0.005, le=0.1,
+        description=(
+            "IAE precision target ε. Lower = more accurate, more oracle queries. "
+            "Default 0.05 completes in 1–2 rounds on GPU; 0.01 requires ~8 rounds "
+            "and may increase circuit depth significantly."
+        ),
+        examples=[0.05],
     )
     alpha: float = Field(
         default=0.05, ge=0.01, le=0.1,

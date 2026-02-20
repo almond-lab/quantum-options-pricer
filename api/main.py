@@ -27,7 +27,7 @@ logger = logging.getLogger("api")
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    sampler = build_sampler(settings.backend, settings.gpu_device)
+    sampler, simulator = build_sampler(settings.backend, settings.gpu_device)
 
     # Detect whether we actually got a GPU backend
     try:
@@ -40,6 +40,7 @@ async def lifespan(app: FastAPI):
     backend_label = "gpu" if gpu_available else "cpu"
 
     app.state.sampler       = sampler
+    app.state.simulator     = simulator   # AerSimulator instance for transpile target
     app.state.backend_label = backend_label
     app.state.gpu_available = gpu_available
 

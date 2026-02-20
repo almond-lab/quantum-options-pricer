@@ -70,7 +70,7 @@ def _resolve_params(req: PricingRequest) -> tuple[float, float, float, bool, str
     return spot, vol, rfr, market_data_used, source_str
 
 
-def _price_sync(req: PricingRequest, sampler: Any, backend_label: str) -> PricingResponse:
+def _price_sync(req: PricingRequest, sampler: Any, simulator: Any, backend_label: str) -> PricingResponse:
     """
     Full blocking pricing call — runs in the thread-pool executor.
     Resolves any auto-fetch params, then runs the quantum IAE circuit.
@@ -82,7 +82,7 @@ def _price_sync(req: PricingRequest, sampler: Any, backend_label: str) -> Pricin
     lnp          = derive_lognormal_params(spot, rfr, vol, T)
     model        = build_uncertainty_model(req.num_qubits, lnp)
     ec, problem  = build_estimation_problem(req.num_qubits, req.strike, lnp, model)
-    iae_result   = run_iae(problem, sampler, req.epsilon_target, req.alpha)
+    iae_result   = run_iae(problem, sampler, simulator, req.epsilon_target, req.alpha)
     result       = interpret_results(ec, problem, iae_result, spot, req.strike, rfr, T, req.option_type)
 
     return PricingResponse(
@@ -139,12 +139,13 @@ def _price_sync(req: PricingRequest, sampler: Any, backend_label: str) -> Pricin
 )
 async def price_option(req: PricingRequest, request: Request) -> PricingResponse:
     sampler       = request.app.state.sampler
+    simulator     = request.app.state.simulator
     backend_label = request.app.state.backend_label
 
     loop = asyncio.get_event_loop()
     try:
         result = await loop.run_in_executor(
-            _executor, _price_sync, req, sampler, backend_label
+            _executor, _price_sync, req, sampler, simulator, backend_label
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

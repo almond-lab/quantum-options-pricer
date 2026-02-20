@@ -17,16 +17,9 @@ spec:
       containers:
       - name: pricer
         image: us-central1-docker.pkg.dev/prod-437516/qpricer1/quantum-pricer:latest
-        command: ["sh", "-c"]
-        args:
-          - pip install --quiet tzdata && exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-config /app/config/logging.yaml
-
-        # --- THE NEW SECRETS BLOCK ---
         envFrom:
         - secretRef:
             name: pricer-secrets
-        # -----------------------------
-        
         resources:
           requests:
             cpu: "2"
@@ -39,15 +32,9 @@ spec:
         volumeMounts:
         - name: logs
           mountPath: /app/logs
-        - name: engine-patch
-          mountPath: /app/pricer/engine.py
-          subPath: engine.py
       volumes:
       - name: logs
         emptyDir: {}
-      - name: engine-patch
-        configMap:
-          name: pricer-engine
 ---
 apiVersion: v1
 kind: Service
