@@ -1,0 +1,22 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - '--tag=$_IMAGE'
+      - '--build-arg=CUDA_ARCH=$_CUDA_ARCH'
+      - '.'
+    timeout: '3600s'
+
+images:
+  - '$_IMAGE'
+
+substitutions:
+  _IMAGE: 'us-central1-docker.pkg.dev/prod-437516/qpricer1/quantum-pricer:latest'
+  _CUDA_ARCH: '75'
+
+options:
+  machineType: 'E2_HIGHCPU_8'   # 8 vCPU / 8 GB — needed for CUDA source compile
+  diskSizeGb: 200                 # CUDA devel image + source build needs headroom
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '3600s'
