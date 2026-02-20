@@ -86,7 +86,7 @@ def build_uncertainty_model(
     model = LogNormalDistribution(
         num_qubits=[num_qubits],
         mu=[params.mu],
-        sigma=[params.sigma**2],     # API expects variance, not std dev
+        sigma=[[params.sigma**2]],   # 1×1 covariance matrix — qiskit-finance 0.4.x API
         bounds=[(params.low, params.high)],
     )
 

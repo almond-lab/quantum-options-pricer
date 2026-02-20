@@ -8,7 +8,8 @@ import logging
 from dataclasses import dataclass
 
 import numpy as np
-from qiskit_aer.primitives import SamplerV2
+from qiskit_aer.primitives import SamplerV2 as AerSamplerV2
+from qiskit.primitives import StatevectorSampler
 from qiskit_algorithms import EstimationProblem, IterativeAmplitudeEstimation
 from qiskit_finance.applications import EuropeanCallPricing
 
@@ -22,12 +23,14 @@ logger = logging.getLogger("pricer.engine")
 def build_sampler(
     backend: str | None = None,
     device_index: int | None = None,
-) -> SamplerV2:
+):
     """
     Construct a SamplerV2 targeting the configured compute backend.
 
-    GPU path  : tensor_network via NVIDIA cuTensorNet (T4 sm_75 / L4 sm_89)
-    CPU path  : statevector fallback — for dev/testing only, no GPU needed
+    GPU path  : AerSamplerV2 with tensor_network via NVIDIA cuTensorNet (T4/L4)
+    CPU path  : qiskit.primitives.StatevectorSampler — reference implementation,
+                handles all circuit types including deprecated finance circuits.
+                For dev/testing only.
     """
     settings = get_settings()
     _backend = backend or settings.backend
@@ -35,10 +38,10 @@ def build_sampler(
 
     if _backend == "gpu":
         logger.info(
-            "Initialising SamplerV2 | method=tensor_network device=GPU[%d] precision=%s",
+            "Initialising AerSamplerV2 | method=tensor_network device=GPU[%d] precision=%s",
             _device, settings.precision,
         )
-        sampler = SamplerV2(
+        sampler = AerSamplerV2(
             options={
                 "backend_options": {
                     "method": "tensor_network",
@@ -51,18 +54,13 @@ def build_sampler(
         )
     else:
         logger.warning(
-            "GPU backend not requested — using CPU statevector. "
+            "GPU backend not requested — using StatevectorSampler (CPU reference). "
             "NOT suitable for production workloads."
         )
-        sampler = SamplerV2(
-            options={
-                "backend_options": {
-                    "method": "statevector",
-                    "device": "CPU",
-                    "precision": settings.precision,
-                }
-            }
-        )
+        # Use qiskit.primitives.StatevectorSampler for CPU fallback.
+        # AerSamplerV2 on CPU rejects deprecated gate types (P(X)) emitted by
+        # qiskit-finance 0.4.x circuits. The reference sampler handles all types.
+        sampler = StatevectorSampler()
 
     return sampler
 
@@ -71,7 +69,7 @@ def build_sampler(
 
 def run_iae(
     problem: EstimationProblem,
-    sampler: SamplerV2,
+    sampler,   # AerSamplerV2 (GPU) or StatevectorSampler (CPU)
     epsilon_target: float,
     alpha: float,
 ) -> object:
@@ -103,10 +101,10 @@ def run_iae(
         result.num_oracle_queries,
     )
     logger.debug(
-        "IAE detail | confidence_interval=(%.6f, %.6f) num_iterations=%d",
+        "IAE detail | confidence_interval=(%.6f, %.6f) num_rounds=%d",
         result.confidence_interval[0],
         result.confidence_interval[1],
-        result.num_iterations,
+        len(result.powers),   # IAEResult has no num_iterations; powers list length = rounds
     )
 
     return result
@@ -171,7 +169,7 @@ def interpret_results(
             call_price=call_price,
             calculated_via_parity=False,
             oracle_queries=result.num_oracle_queries,
-            num_iterations=result.num_iterations,
+            num_iterations=len(result.powers),  # IAEResult has no num_iterations attr
             total_qubits=problem.grover_operator.num_qubits,
             grover_depth=problem.grover_operator.decompose().depth(),
         )
@@ -197,7 +195,7 @@ def interpret_results(
         call_price=call_price,
         calculated_via_parity=True,
         oracle_queries=result.num_oracle_queries,
-        num_iterations=result.num_iterations,
+        num_iterations=len(result.powers),  # IAEResult has no num_iterations attr
         total_qubits=problem.grover_operator.num_qubits,
         grover_depth=problem.grover_operator.decompose().depth(),
     )
