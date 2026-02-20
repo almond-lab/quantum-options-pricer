@@ -47,8 +47,8 @@ RUN pip install --no-cache-dir --upgrade pip scikit-build patchelf \
 RUN git clone --depth 1 --branch 0.17.2 https://github.com/Qiskit/qiskit-aer.git /tmp/qiskit-aer-src \
  && cd /tmp/qiskit-aer-src \
  && CUDACXX=/usr/local/cuda/bin/nvcc \
+    CMAKE_ARGS="-DAER_THRUST_BACKEND=CUDA -DAER_CUDA_ARCHITECTURES=${CUDA_ARCH}" \
     pip install --no-cache-dir . \
-      -- -DAER_THRUST_BACKEND=CUDA -DAER_CUDA_ARCHITECTURES=${CUDA_ARCH} \
  && rm -rf /tmp/qiskit-aer-src
 
 
