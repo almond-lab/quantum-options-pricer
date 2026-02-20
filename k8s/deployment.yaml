@@ -8,8 +8,8 @@
 #        kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nvidia-device-plugin.yaml
 #   3. Secret created (see secret-template.yaml comments)
 #   4. Image pushed to Artifact Registry:
-#        docker build -t us-docker.pkg.dev/<PROJECT>/quantum-pricer/api:latest .
-#        docker push us-docker.pkg.dev/<PROJECT>/quantum-pricer/api:latest
+#        gcloud builds submit --config cloudbuild.yaml .
+#        # builds: us-central1-docker.pkg.dev/prod-437516/qpricer1/quantum-pricer:latest
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -40,7 +40,7 @@ spec:
 
       containers:
         - name: api
-          image: us-docker.pkg.dev/YOUR_PROJECT/quantum-pricer/api:latest
+          image: us-central1-docker.pkg.dev/prod-437516/qpricer1/quantum-pricer:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000
