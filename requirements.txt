@@ -5,8 +5,8 @@
 
 # ── Quantum Core ──────────────────────────────────────────────────────────────
 qiskit==2.3.0
-qiskit-aer-gpu==0.16.0          # CUDA 12.4-enabled AerSimulator + SamplerV2
-qiskit-finance==0.4.2            # LogNormalDistribution, EuropeanCallPricing
+qiskit-aer-gpu==0.15.1          # CUDA 12.4-enabled AerSimulator + SamplerV2
+qiskit-finance==0.4.1            # LogNormalDistribution, EuropeanCallPricing
 qiskit-algorithms==0.4.0         # IterativeAmplitudeEstimation (V2-primitive-aware)
 cuquantum-python-cu12            # NVIDIA cuTensorNet bindings (tensor_network method)
 

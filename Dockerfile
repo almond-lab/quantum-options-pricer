@@ -5,7 +5,7 @@
 # =============================================================================
 
 # ── Stage 1: Builder ─────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.4.1-cudnn9-devel-ubuntu22.04 AS builder
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS builder
 
 ARG CUDA_ARCH=75
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM nvidia/cuda:12.4.1-cudnn9-runtime-ubuntu22.04 AS runtime
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
