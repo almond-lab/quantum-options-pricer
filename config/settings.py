@@ -10,6 +10,8 @@ import yaml
 from functools import lru_cache
 from pathlib import Path
 
+from typing import Optional
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -41,6 +43,9 @@ class Settings(BaseSettings):
 
     # ── cuQuantum ────────────────────────────────────────────────────────────
     cuquantum_logfile: str = "/app/logs/cuquantum.log"
+
+    # ── Databento ────────────────────────────────────────────────────────────
+    databento_api_key: Optional[str] = Field(default=None, description="Databento Pay-As-You-Go API key")
 
 
 @lru_cache(maxsize=1)
