@@ -1,0 +1,30 @@
+# =============================================================================
+# HorizontalPodAutoscaler — Quantum Options Pricer
+#
+# NOTE: GPU workloads generally should NOT scale horizontally without
+# dedicated GPU quota. This HPA scales on CPU only (IAE uses the GPU
+# exclusively; CPU reflects queue wait time, not GPU saturation).
+#
+# For GPU-aware scaling, prefer Keda + Prometheus GPU utilization metric.
+# This HPA is provided as a safe default for CPU-triggered scale-out when
+# you have multiple T4 nodes available.
+# =============================================================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: quantum-pricer
+  namespace: quantum-pricer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: quantum-pricer
+  minReplicas: 1
+  maxReplicas: 4          # cap at GPU node pool size
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

@@ -1,0 +1,96 @@
+# =============================================================================
+# Deployment — Quantum Options Pricer
+# GPU: NVIDIA T4 (GKE Standard node pool with accelerator=nvidia-tesla-t4)
+#
+# Prerequisites (run once per cluster):
+#   1. GPU node pool exists with --accelerator type=nvidia-tesla-t4,count=1
+#   2. NVIDIA device plugin installed:
+#        kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nvidia-device-plugin.yaml
+#   3. Secret created (see secret-template.yaml comments)
+#   4. Image pushed to Artifact Registry:
+#        docker build -t us-docker.pkg.dev/<PROJECT>/quantum-pricer/api:latest .
+#        docker push us-docker.pkg.dev/<PROJECT>/quantum-pricer/api:latest
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantum-pricer
+  namespace: quantum-pricer
+  labels:
+    app: quantum-pricer
+spec:
+  replicas: 1          # GPU state is not shared — keep at 1 per GPU
+  selector:
+    matchLabels:
+      app: quantum-pricer
+  template:
+    metadata:
+      labels:
+        app: quantum-pricer
+    spec:
+      # ── Node affinity: only schedule on T4 GPU nodes ──────────────────────
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+
+      # ── Tolerations: GPU nodes are typically tainted ──────────────────────
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+
+      containers:
+        - name: api
+          image: us-docker.pkg.dev/YOUR_PROJECT/quantum-pricer/api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+
+          # ── GPU resource allocation ──────────────────────────────────────
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              memory: "8Gi"
+              cpu: "2"
+            requests:
+              nvidia.com/gpu: "1"
+              memory: "4Gi"
+              cpu: "1"
+
+          # ── Environment ───────────────────────────────────────────────────
+          env:
+            - name: BACKEND
+              value: "gpu"
+            - name: GPU_DEVICE
+              value: "0"
+            - name: LOG_LEVEL
+              value: "INFO"
+          envFrom:
+            - secretRef:
+                name: quantum-pricer-secret
+
+          # ── Health probes ─────────────────────────────────────────────────
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+
+          # ── Log volume ────────────────────────────────────────────────────
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+
+      volumes:
+        - name: logs
+          emptyDir: {}

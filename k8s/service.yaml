@@ -1,0 +1,25 @@
+# =============================================================================
+# Service — Quantum Options Pricer
+#
+# Options:
+#   type: ClusterIP       — internal only (use with Ingress/Gateway below)
+#   type: LoadBalancer    — direct external IP (simple, higher cost)
+#
+# Default: ClusterIP. Change to LoadBalancer for quick external testing.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: quantum-pricer
+  namespace: quantum-pricer
+  labels:
+    app: quantum-pricer
+spec:
+  type: ClusterIP
+  selector:
+    app: quantum-pricer
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
