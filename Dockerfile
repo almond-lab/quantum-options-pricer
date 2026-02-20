@@ -67,6 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3-pip \
     libgomp1 \
+    libopenblas0 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/python  python  /usr/bin/python3.11 1 \
