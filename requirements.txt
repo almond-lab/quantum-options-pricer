@@ -1,0 +1,24 @@
+# =============================================================================
+# Quantum Options Pricer — Python Dependencies
+# Pinned for: Qiskit 2.3 + CUDA 12.4.1 + NVIDIA T4/L4
+# =============================================================================
+
+# ── Quantum Core ──────────────────────────────────────────────────────────────
+qiskit==2.3.0
+qiskit-aer-gpu==0.16.0          # CUDA 12.4-enabled AerSimulator + SamplerV2
+qiskit-finance==0.4.2            # LogNormalDistribution, EuropeanCallPricing
+qiskit-algorithms==0.4.0         # IterativeAmplitudeEstimation (V2-primitive-aware)
+cuquantum-python-cu12            # NVIDIA cuTensorNet bindings (tensor_network method)
+
+# ── API Layer ────────────────────────────────────────────────────────────────
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.7.0
+pydantic-settings==2.3.0
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+python-json-logger==2.0.7
+PyYAML==6.0.1
+
+# ── Numerics ────────────────────────────────────────────────────────────────
+numpy>=1.26.0,<2.0.0
