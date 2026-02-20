@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantum-pricer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: quantum-pricer
+  template:
+    metadata:
+      labels:
+        app: quantum-pricer
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      containers:
+      - name: pricer
+        image: us-central1-docker.pkg.dev/prod-437516/qpricer1/quantum-pricer:latest
+        command: ["sh", "-c"]
+        args:
+          - pip install --quiet tzdata && exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-config /app/config/logging.yaml
+
+        # --- THE NEW SECRETS BLOCK ---
+        envFrom:
+        - secretRef:
+            name: pricer-secrets
+        # -----------------------------
+        
+        resources:
+          requests:
+            cpu: "2"
+            memory: "8Gi"
+            ephemeral-storage: "10Gi"
+          limits:
+            nvidia.com/gpu: 1
+        ports:
+        - containerPort: 8000
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: engine-patch
+          mountPath: /app/pricer/engine.py
+          subPath: engine.py
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: engine-patch
+        configMap:
+          name: pricer-engine
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quantum-pricer-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: quantum-pricer
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000

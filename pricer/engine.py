@@ -46,7 +46,6 @@ def build_sampler(
                 "backend_options": {
                     "method": "tensor_network",
                     "device": "GPU",
-                    "device_index": _device,
                     "precision": settings.precision,
                     "cuStateVec_enable": False,   # use cuTensorNet, not cuStateVec
                 }
