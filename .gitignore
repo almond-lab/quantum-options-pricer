@@ -1,7 +1,8 @@
 .env
 .env.test
 .env.*
-logs/
+logs/*
+!logs/.gitkeep
 __pycache__/
 *.pyc
 *.pyo
@@ -9,3 +10,4 @@ __pycache__/
 .mypy_cache/
 dist/
 *.egg-info/
+logs/.gitkeep

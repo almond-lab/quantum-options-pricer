@@ -67,6 +67,7 @@ WORKDIR /app
 COPY api/     ./api/
 COPY pricer/  ./pricer/
 COPY config/  ./config/
+COPY data/    ./data/
 
 EXPOSE 8000
 
