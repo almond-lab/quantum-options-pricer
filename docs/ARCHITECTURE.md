@@ -285,6 +285,135 @@ See `.env.example` for full reference. Key variables:
 
 ---
 
+## Kubernetes GPU Deployment
+
+### How GPU Detection Works at Runtime
+
+`build_sampler()` in `pricer/engine.py` checks for GPU availability automatically
+at every call — no code change needed between environments:
+
+```python
+devices = AerSimulator().available_devices()
+if "GPU" in devices:
+    # AerSamplerV2 with method='tensor_network' via NVIDIA cuTensorNet
+else:
+    # Fallback: qiskit.primitives.StatevectorSampler (CPU)
+```
+
+When the pod lands on a GPU node with the NVIDIA driver visible, it picks up
+`tensor_network` automatically. The current dev environment has no GPU and runs
+the CPU fallback.
+
+### Expected Latency Improvement on GPU Cluster
+
+| Environment | 8-qubit latency | Notes |
+|---|---|---|
+| CPU-only (dev, this instance) | ~87 s | StatevectorSampler, 2^13 amplitudes sequentially |
+| **T4 GPU pod** | **~100–500 ms** | cuTensorNet tensor contraction, ~100–500× faster |
+| **L4 GPU pod** | **~50–200 ms** | Higher memory bandwidth than T4 |
+
+The gain is not linear — it's structural. CPU statevector simulation stores all
+2^13 = 8,192 complex amplitudes and evolves them gate-by-gate sequentially.
+cuTensorNet instead contracts the circuit as a tensor network on thousands of
+CUDA cores in parallel, keeping everything in GPU VRAM across IAE iterations
+without host round-trips.
+
+### Pod Spec Requirements
+
+The container must have GPU access declared explicitly. Minimum Kubernetes pod spec:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: quantum-pricer
+spec:
+  runtimeClassName: nvidia          # required — exposes NVIDIA driver to container
+  containers:
+    - name: pricer
+      image: quantum-options-pricer:latest
+      resources:
+        limits:
+          nvidia.com/gpu: 1         # request exactly 1 GPU
+        requests:
+          nvidia.com/gpu: 1
+      env:
+        - name: BACKEND
+          value: "gpu"
+        - name: GPU_DEVICE
+          value: "0"
+        - name: GPU_ARCH
+          value: "75"               # 75 for T4, 89 for L4
+      ports:
+        - containerPort: 8000
+```
+
+Or as a Deployment with a GPU node selector:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quantum-pricer
+spec:
+  replicas: 1                       # keep at 1 — GPU state is not fork-safe
+  selector:
+    matchLabels:
+      app: quantum-pricer
+  template:
+    metadata:
+      labels:
+        app: quantum-pricer
+    spec:
+      runtimeClassName: nvidia
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4   # GKE example
+        # accelerator: nvidia-l4                            # swap for L4
+      containers:
+        - name: pricer
+          image: quantum-options-pricer:latest
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+            requests:
+              nvidia.com/gpu: 1
+          envFrom:
+            - secretRef:
+                name: quantum-pricer-env   # kubectl create secret generic from .env
+          ports:
+            - containerPort: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+```
+
+### Common Pitfalls
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Still using CPU fallback on GPU node | `runtimeClassName: nvidia` missing | Add it to pod spec |
+| `available_devices()` returns only `('CPU',)` | NVIDIA device plugin not installed in cluster | Install `nvidia-device-plugin` DaemonSet |
+| `CUDA error: no kernel image` | Wrong `GPU_ARCH` build arg | Rebuild with correct arch (75=T4, 89=L4) |
+| `cuTensorNet not found` at startup | `cuquantum-python-cu12` not installed in image | Verify Dockerfile stage copies it from builder |
+| OOM on GPU | Too many qubits or concurrent requests | Reduce `num_qubits` or keep `replicas: 1` |
+
+### Verifying GPU is Active
+
+After deploying, check the startup log for the sampler line:
+
+```
+# GPU active (what you want):
+INFO | pricer.engine | Sampler: AerSamplerV2 | method=tensor_network | device=GPU:0
+
+# CPU fallback (dev only):
+WARNING | pricer.engine | GPU backend not requested — using StatevectorSampler (CPU reference)
+```
+
+---
+
 ## Docker
 
 ```bash
