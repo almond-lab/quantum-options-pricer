@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
     build-essential \
     cmake \
+    ninja-build \
+    libopenblas-dev \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -35,17 +37,18 @@ WORKDIR /build
 
 # Layer-cache: install deps before copying app code
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip scikit-build-core patchelf \
+RUN pip install --no-cache-dir --upgrade pip scikit-build patchelf \
  && pip install --no-cache-dir -r requirements.txt
 
 # Build qiskit-aer 0.17.2 with CUDA GPU support from source.
 # qiskit-aer-gpu on PyPI tops at 0.15.1 (incompatible with qiskit 2.x).
 # qiskit-aer 0.17.2 release explicitly fixes GPU builds for qiskit>=2.1.
+# Uses old scikit-build so cmake args are passed with -- separator.
 RUN git clone --depth 1 --branch 0.17.2 https://github.com/Qiskit/qiskit-aer.git /tmp/qiskit-aer-src \
  && cd /tmp/qiskit-aer-src \
  && CUDACXX=/usr/local/cuda/bin/nvcc \
     pip install --no-cache-dir . \
-      -Ccmake.args="-DAER_THRUST_BACKEND=CUDA;-DAER_CUDA_ARCHITECTURES=${CUDA_ARCH}" \
+      -- -DAER_THRUST_BACKEND=CUDA -DAER_CUDA_ARCHITECTURES=${CUDA_ARCH} \
  && rm -rf /tmp/qiskit-aer-src
 
 
