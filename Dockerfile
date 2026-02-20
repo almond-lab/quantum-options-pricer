@@ -1,13 +1,13 @@
 # =============================================================================
 # Quantum Options Pricer — Dockerfile
 # Base : NVIDIA CUDA 12.4.1 + cuDNN 9 (Ubuntu 22.04)
-# GPU  : T4 (sm_75) default | swap ARG CUDA_ARCH=89 for L4 (Ada Lovelace)
+# GPU  : T4 (sm_75) default | swap ARG CUDA_ARCH=8.9 for L4 (Ada Lovelace)
 # =============================================================================
 
 # ── Stage 1: Builder ─────────────────────────────────────────────────────────
 FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04 AS builder
 
-ARG CUDA_ARCH=75
+ARG CUDA_ARCH=7.5
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

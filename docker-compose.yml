@@ -2,7 +2,7 @@
 # Quantum Options Pricer — docker-compose
 # Usage:
 #   Default (T4):  docker compose up
-#   L4 override:   GPU_ARCH=89 docker compose up
+#   L4 override:   GPU_ARCH=8.9 docker compose up
 # =============================================================================
 
 version: "3.9"
@@ -13,7 +13,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        CUDA_ARCH: ${GPU_ARCH:-75}        # 75 = T4 (Turing) | 89 = L4 (Ada)
+        CUDA_ARCH: ${GPU_ARCH:-7.5}       # 7.5 = T4 (Turing) | 8.9 = L4 (Ada)
     image: quantum-options-pricer:latest
     container_name: quantum-pricer
     runtime: nvidia
