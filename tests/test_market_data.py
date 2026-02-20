@@ -176,7 +176,7 @@ class TestFetchOptionsDefinitions:
         assert call_kwargs["dataset"] == OPRA_DATASET
         assert call_kwargs["schema"] == db.Schema.DEFINITION
         assert call_kwargs["stype_in"] == db.SType.PARENT
-        assert call_kwargs["symbols"] == ["AAPL"]
+        assert call_kwargs["symbols"] == ["AAPL.OPT"]
 
 
 # ── fetch_nbbo_snapshot (mocked) ─────────────────────────────────────────────
@@ -234,7 +234,7 @@ class TestFetchNbboSnapshot:
         client.timeseries.get_range.return_value = self._mock_nbbo_store()
         fetch_nbbo_snapshot(client, "AAPL", date(2025, 1, 15))
         call_kwargs = client.timeseries.get_range.call_args.kwargs
-        assert call_kwargs["schema"] == db.Schema.MBP_1
+        assert call_kwargs["schema"] == db.Schema.CBBO_1M
         assert call_kwargs["stype_in"] == db.SType.PARENT
 
     def test_empty_store_returns_empty_df(self):

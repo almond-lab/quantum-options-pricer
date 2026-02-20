@@ -175,12 +175,12 @@ def fetch_options_definitions(
         dataset  = OPRA_DATASET,
         schema   = db.Schema.DEFINITION,
         stype_in = db.SType.PARENT,
-        symbols  = [ticker],
+        symbols  = [f"{ticker}.OPT"],
         start    = day_str,
         end      = next_day_str,
     )
 
-    df_raw = store.to_df(price_type="float", pretty_ts=True)
+    df_raw = store.to_df(price_type="float", pretty_ts=True).reset_index()
 
     if df_raw.empty:
         logger.warning("No definitions returned | ticker=%s date=%s", ticker, day_str)
@@ -231,9 +231,10 @@ def fetch_nbbo_snapshot(
     """
     Fetch the 1-minute NBBO snapshot at market close (cost-saving strategy).
 
-    Uses schema=MBP_1 (Market by Price, Level 1 = National Best Bid and Offer).
-    Requests exactly 1 minute: 15:59:00 → 16:00:00 ET.
-    Takes the LAST update per instrument in the window (most recent pre-close quote).
+    Uses schema=CBBO_1M (Consolidated BBO sampled every minute — one row per
+    instrument per minute, far cheaper than tick-level CMBP_1 for AAPL's 4000+
+    contracts). Requests the 15:59 minute: 15:59:00 → 16:00:00 ET.
+    Takes the LAST row per instrument to handle any multi-publisher duplicates.
 
     Returns clean DataFrame with columns:
         instrument_id, ts_recv, bid, ask, bid_size, ask_size, mid, spread
@@ -250,14 +251,15 @@ def fetch_nbbo_snapshot(
 
     store = client.timeseries.get_range(
         dataset  = OPRA_DATASET,
-        schema   = db.Schema.MBP_1,
+        schema   = db.Schema.CBBO_1M,
         stype_in = db.SType.PARENT,
-        symbols  = [ticker],
+        symbols  = [f"{ticker}.OPT"],
         start    = start_et,
         end      = end_et,
     )
 
-    df_raw = store.to_df(price_type="float", pretty_ts=True)
+    # reset_index() brings any named index (ts_recv or ts_event) into columns
+    df_raw = store.to_df(price_type="float", pretty_ts=True).reset_index()
 
     if df_raw.empty:
         logger.warning(
@@ -268,14 +270,16 @@ def fetch_nbbo_snapshot(
         return pd.DataFrame()
 
     logger.info(
-        "NBBO raw | rows=%d (all L1 updates in window) instruments=%d",
-        len(df_raw), df_raw["instrument_id"].nunique(),
+        "NBBO raw | rows=%d instruments=%d cols=%s",
+        len(df_raw), df_raw["instrument_id"].nunique(), df_raw.columns.tolist(),
     )
 
-    # ── Take the LAST update per instrument (final pre-close NBBO) ────────────
+    # ── Take the LAST row per instrument (for tick schemas: most recent update;
+    #    for bar schemas like CBBO_1M: there should be at most 1 row per instrument)
+    ts_col = "ts_recv" if "ts_recv" in df_raw.columns else "ts_event"
     df = (
         df_raw
-        .sort_values("ts_recv")
+        .sort_values(ts_col)
         .groupby("instrument_id", as_index=False)
         .last()
     )
@@ -307,7 +311,7 @@ def fetch_nbbo_snapshot(
     # ── Build clean output schema ─────────────────────────────────────────────
     result = pd.DataFrame({
         "instrument_id": df["instrument_id"].astype(int),
-        "ts_recv":       df["ts_recv"],
+        "ts_recv":       df[ts_col],
         "bid":           df[bid_col].astype(float),
         "ask":           df[ask_col].astype(float),
         "bid_size":      df["bid_sz_00"].astype(int),
@@ -443,23 +447,53 @@ def get_options_chain(
             "or pass api_key= explicitly."
         )
 
-    trading_day = _previous_trading_day(reference_date)
+    attempt_day = _previous_trading_day(reference_date)
     ticker      = ticker.upper().strip()
-
-    logger.info(
-        "get_options_chain | ticker=%s trading_day=%s",
-        ticker, trading_day,
-    )
-
     client      = db.Historical(key=key)
-    definitions = fetch_options_definitions(client, ticker, trading_day)
-    nbbo        = fetch_nbbo_snapshot(client, ticker, trading_day)
-    snapshot    = build_options_chain(definitions, nbbo, trading_day, ticker)
 
-    if snapshot is None:
-        raise RuntimeError(
-            f"Failed to build options chain for {ticker} on {trading_day}. "
-            "Check logs above for root cause."
+    # OPRA.PILLAR Pay-As-You-Go has an embargo on the most recent trading
+    # session(s). Step back one trading day at a time until data is available.
+    MAX_EMBARGO_STEPS = 5
+    last_exc: Exception | None = None
+
+    for step in range(MAX_EMBARGO_STEPS):
+        logger.info(
+            "get_options_chain | ticker=%s attempt_day=%s (step=%d)",
+            ticker, attempt_day, step,
         )
 
-    return snapshot
+        try:
+            definitions = fetch_options_definitions(client, ticker, attempt_day)
+            nbbo        = fetch_nbbo_snapshot(client, ticker, attempt_day)
+            snapshot    = build_options_chain(definitions, nbbo, attempt_day, ticker)
+
+            if snapshot is None:
+                raise RuntimeError(
+                    f"Failed to build options chain for {ticker} on {attempt_day}. "
+                    "Check logs above for root cause."
+                )
+
+            if step > 0:
+                logger.info(
+                    "OPRA.PILLAR embargo: fell back %d trading day(s) to %s",
+                    step, attempt_day,
+                )
+
+            return snapshot
+
+        except Exception as exc:
+            err_str = str(exc)
+            if "license_not_found_unauthorized" in err_str or "403" in err_str:
+                logger.warning(
+                    "OPRA.PILLAR embargo on %s — stepping back: %s",
+                    attempt_day, err_str[:120],
+                )
+                last_exc = exc
+                attempt_day = _previous_trading_day(attempt_day)
+                continue
+            raise  # non-embargo errors propagate immediately
+
+    raise RuntimeError(
+        f"OPRA.PILLAR data embargoed for the last {MAX_EMBARGO_STEPS} trading days "
+        f"for {ticker}. A live data license may be required."
+    ) from last_exc
