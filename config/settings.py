@@ -54,13 +54,29 @@ def get_settings() -> Settings:
 
 
 def setup_logging() -> None:
-    """Load logging config from YAML. Falls back to basicConfig if file missing."""
+    """Load logging config from YAML. Falls back to basicConfig if file missing
+    or if the log directory doesn't exist (e.g. outside Docker)."""
     log_yaml = Path(__file__).parent / "logging.yaml"
+    configured = False
     if log_yaml.exists():
         with open(log_yaml) as f:
             cfg = yaml.safe_load(f)
-        logging.config.dictConfig(cfg)
-    else:
+        # Ensure log directories exist; skip silently if no write permission
+        # (e.g. /app/logs outside Docker).
+        for handler in cfg.get("handlers", {}).values():
+            if "filename" in handler:
+                log_path = Path(handler["filename"])
+                try:
+                    log_path.parent.mkdir(parents=True, exist_ok=True)
+                except (PermissionError, OSError):
+                    pass
+        try:
+            logging.config.dictConfig(cfg)
+            configured = True
+        except Exception:
+            pass   # fall through to basicConfig
+
+    if not configured:
         logging.basicConfig(
             level=get_settings().log_level,
             format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
