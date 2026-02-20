@@ -1,0 +1,50 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  detailed:
+    format: "%(asctime)s | %(levelname)-8s | %(name)s:%(lineno)d | %(message)s"
+    datefmt: "%Y-%m-%dT%H:%M:%S"
+  json:
+    (): "pythonjsonlogger.jsonlogger.JsonFormatter"
+    format: "%(asctime)s %(levelname)s %(name)s %(lineno)d %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+    formatter: detailed
+    level: DEBUG
+
+  file:
+    class: logging.handlers.RotatingFileHandler
+    filename: /app/logs/pricer.log
+    maxBytes: 10485760    # 10 MB
+    backupCount: 5
+    formatter: json
+    level: DEBUG
+
+loggers:
+  pricer:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+  api:
+    level: DEBUG
+    handlers: [console, file]
+    propagate: false
+
+  qiskit:
+    level: WARNING
+    handlers: [console]
+    propagate: false
+
+  uvicorn:
+    level: INFO
+    handlers: [console]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console]

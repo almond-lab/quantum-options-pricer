@@ -1,0 +1,44 @@
+# =============================================================================
+# Quantum Options Pricer — docker-compose
+# Usage:
+#   Default (T4):  docker compose up
+#   L4 override:   GPU_ARCH=89 docker compose up
+# =============================================================================
+
+version: "3.9"
+
+services:
+  pricer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        CUDA_ARCH: ${GPU_ARCH:-75}        # 75 = T4 (Turing) | 89 = L4 (Ada)
+    image: quantum-options-pricer:latest
+    container_name: quantum-pricer
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # App config — overridden by .env or shell env
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - BACKEND=${BACKEND:-gpu}
+      - GPU_DEVICE=${GPU_DEVICE:-0}
+      - NUM_SHOTS=${NUM_SHOTS:-8192}
+      - MAX_QUBITS=${MAX_QUBITS:-20}
+      - API_WORKERS=${API_WORKERS:-1}
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      # Mount logs out of container for persistence
+      - ./logs:/app/logs
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
